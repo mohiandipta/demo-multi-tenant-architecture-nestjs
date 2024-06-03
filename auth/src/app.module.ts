@@ -12,11 +12,8 @@ import { RoleModule } from './modules/role/role.module';
 import { StorageModule } from './utils/azure/storage.module';
 import { RoleService } from './modules/role/services/role.service';
 import { GateWayModule } from './socket.io/gateway.module';
-import { MediaModule } from './modules/media/media.module';
-import { SearchModule } from './modules/search/search.module';
-import { ProductModule } from './modules/product/product.module';
-import { CategoryModule } from './modules/category/category.module';
-import { SettingsModule } from './modules/settings/settings.module';
+import { REQUEST } from '@nestjs/core';
+import { TenantMiddleware } from './middleware/tenant/tenant.middleware';
 
 const logsFolderPath = 'logs';
 
@@ -27,7 +24,14 @@ if (!fs.existsSync(logsFolderPath)) {
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot(configService.getTypeOrmConfig()),
+    // TypeOrmModule.forRoot(configService.getTypeOrmConfig()),
+    TypeOrmModule.forRootAsync({
+      useFactory: async (request: Request) => {
+        const tenant = request['tenant'];
+        return configService.getTypeOrmConfig(tenant);
+      },
+      inject: [REQUEST],
+    }),
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
@@ -55,11 +59,6 @@ if (!fs.existsSync(logsFolderPath)) {
     RoleModule,
     StorageModule,
     GateWayModule,
-    CategoryModule,
-    MediaModule,
-    ProductModule,
-    SearchModule,
-    SettingsModule
   ],
   controllers: [AppController],
   providers: [
@@ -70,11 +69,9 @@ if (!fs.existsSync(logsFolderPath)) {
 
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    // consumer.apply(AccessControlMiddleware)
-    //   .exclude({
-    //     method: RequestMethod.POST, path: 'auth/login'
-    //   })
-    //   .forRoutes('*')
+    consumer
+      .apply(TenantMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL }); // Apply to all routes or specific ones
   }
 }
 
